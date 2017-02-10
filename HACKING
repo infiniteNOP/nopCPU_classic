@@ -1,0 +1,236 @@
+This is a small study aid for nopCPU's source code. Users are advised
+to read it before using this project.
+
+--1. Files----------------------------------------------------------------------
+
+Assuming you have successfully cloned the source code repository, you will have
+nine files in the project directory. Out of them, only four are needed in
+order to successfully synthesize and implement the design for a real-world
+FPGA. The other files contain testbenches, build instructions for the program
+'make' to read, and the license used for this project. Appended is a table of
+all the files included in this design, along with a short description of their
+function:
+
+--Table 1.1: List of repository files------------------------------------------
+
+alu.v -- Contains the Arithmetic and Logical Unit used in this CPU
+regfile.v -- Contains the register file of this CPU
+control_unit.v -- Contains the control unit of this CPU.
+cpu.v -- Contains the datapath used in this CPU.
+cpu_tb.v -- Contains the testbench used to provide stimuli to the CPU during
+            simulation.
+Makefile -- Contains instructions for the program Make to use when building the
+            simulation executable.
+README -- Contains short information about this project.
+COPYING -- Contains the full text of the LGPL license, under the terms of which
+           this project is licensed.
+HACKING -- This file.
+
+-------------------------------------------------------------------------------
+
+--2. The Architecture----------------------------------------------------------
+
+This CPU uses a Harvard Architecture, which essentially means it uses separate
+buses for user and program data. For more information, you can read the
+Wikipedia article for 'Harvard Architecture', or Google your way around the
+'net.
+
+-------------------------------------------------------------------------------
+
+--3. Instruction format--------------------------------------------------------
+
+In order to facilitate single-cycle execution for most instructions, this CPU
+design uses a peculiar instruction format. The instruction is encoded in the
+MSB, while the operands, which usually refer to registers, are encoded in the
+LSB. Operands are encoded in the following way:
+
+	* MSB (control_unit.v, opcode[3:2]): First register to read from.
+	* LSB (control_unit.v, opcode[1:0]): Second register to read from.
+
+The result of any operation will always be stored in the register 
+specified in the second operand field.
+
+-------------------------------------------------------------------------------
+
+--4. Instruction execution-----------------------------------------------------
+
+NopCPU's instruction set can be divided to two categories of instructions,
+depending on the time it takes to execute them: Single-cycle instructions and
+dual-cycle instructions. Details about those two categories can be found
+below:
+
+--4.1 Single-cycle instructions------------------------------------------------
+
+All single-cycle instructions carry out various ALU operations on registers. 
+Since their operands are part of the instruction, they are executed right away.
+
+-------------------------------------------------------------------------------
+
+--4.2 Dual-cycle instructions-------------------------------------------------- 
+
+Instructions that require the use of operands pulled from memory require
+two cycles to be executed. These instructions are: LD, LDUMEM ST and RTS. 
+In case such an instruction is encountered, the internal FSM "stage" 
+will increase by one (control_unit.v:61), in order to allow for the
+fetching of operands and actual execution to occur.
+
+-------------------------------------------------------------------------------
+
+--4.3 Triple-cycle instruction-------------------------------------------------
+
+All branch instructions (JMP, CALL, BEQ and BNE) take three cycles to execute,
+because the program counter requires one additional cycle to update itself.
+
+-------------------------------------------------------------------------------
+
+For a full list of all of NOPCPU instructions, along with their execution
+time, refer to table 5.1 .
+
+-------------------------------------------------------------------------------
+
+--5. List of instructions------------------------------------------------------
+
+Below is a list of current instructions, sorted by their opcode:
+
+--Table 5.1: List of instructions----------------------------------------------
+
+Instruction -- Opcode (4-bit, in verilog number format) -- Purpose -- Cycles
+OR -- 4'h0 -- Performs logical OR on the specified registers. -- Single-Cycle
+AND -- 4'h1 -- Performs logical AND on the specified registers. -- Single-Cycle
+NOT -- 4'h2 -- Performs logical NOT on the specified registers. -- Single-Cycle
+XOR -- 4'h3 -- Performs logical XOR on the specified registers. -- Single-Cycle
+ADD -- 4'h4 -- Adds the specified registers together. -- Single-Cycle
+SUB -- 4'h5 -- Subtracts the specified registers. -- Single-Cycle
+RSHIFT1 -- 4'h6 -- Shifts the specified register right by 1 place -- Single-cyc
+RSHIFTN -- 4'h7 -- Shifts the specified register right by as many places as
+                   the number stored in the second register specified as
+                   operand. -- Single-Cycle
+LD -- 4'h8 -- Loads the value of the operand to a register. -- Dual-Cycle
+JMP -- 4'h9 -- Jumps to a memory location. -- Triple-Cycle
+NOP -- 8'h9f -- Does nothing. --Single-cycle
+CALL -- 4'ha -- Like JMP, but stores the address after it so that the program
+                can return to the location the branch was done by using RTS.
+                -- Triple-cycle
+RTS -- 4'hb -- Returns from a jump or an interrupt. -- Dual-cycle
+BEQ -- 4'hc -- Jumps to a location, if the specified registers equal -- Tri-Cyc
+BNE -- 4'hd -- Jumps to a location, if the specified registers *do not* equal
+               -- Triple-Cycle
+ST -- 4'he -- Stores the value of a register to memory -- Dual-Cycle
+LDUMEM -- 4'hf -- Loads a value stored in the user memory address specified
+                  by the operand to a register. -- Dual-Cycle
+
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+
+--6. Registers-----------------------------------------------------------------
+
+NopCPU has four registers, handled by the register file (regfile.v). The
+register file has seven inputs and two outputs, which are described in the
+following table:
+
+--Table 6.1: List of inputs of regfile.v---------------------------------------
+
+Input -- Width -- Purpose
+readreg1 -- 2 Bits -- Specifies the register whose contents will be output in
+                      read1.
+readreg2 -- 2 Bits -- Same as readreg1, but register content is output in read2
+writereg -- 2 Bits -- Specifies the register to be written.
+data -- 8 Bits -- Used as a generic data input when writing to a register.
+clk -- 1 Bit -- Clock.
+clr -- 1 Bit -- If set to HIGH, the content of all register will be cleared.
+regwrite -- 1 Bit -- If set to HIGH, the regfile will enter Write mode.
+
+-------------------------------------------------------------------------------
+
+The regfile has two 8-bit-wide outputs, write1 and write2, which will output 
+the contents of the registers specified by readreg1 and readreg2 respectively.
+Writing is done on the negative edge, so that the results can be viewed at the
+next cycle.
+
+-------------------------------------------------------------------------------
+
+--7. Program Counter-----------------------------------------------------------
+
+The program counter is a simple 8-bit counter, whose module declaration begins
+in control_unit.v:204. It is hard-wired to cpu.v::datamem_address. In case the
+jump flag is set, the program counter will jump to the address specified in
+jmpaddr.
+
+-------------------------------------------------------------------------------
+
+--8. Reset behavior------------------------------------------------------------
+
+When reset is set to HIGH, all internal signals will be returned to their
+initial state. Once the reset signal becomes LOW again, the CPU needs to
+wait for a single clock cycle before being ready to execute instructions
+again. This is due to the CPU having to wait for the program counter to reset
+itself before being able to fetch new instructions, and as such, having to
+begin operation at state 3 of the internal FSM.
+
+-------------------------------------------------------------------------------
+
+--9. Interrupt behavior--------------------------------------------------------
+
+When the interrupt signal is set to HIGH, the CPU abandons whatever it's doing,
+and jumps to the vector 8'hfe, where a JMP instruction can be issued to jump
+to the internal interrupt handling routine. After handling the interrupt,
+the programmer can return to wherever execution had stopped by issuing
+RTS.
+
+-------------------------------------------------------------------------------
+
+--10. The ALU------------------------------------------------------------------
+
+The ALU accepts two 8-bit numbers, a and b, which are used as operands for the
+operation specified in the 8-bit port opcode. The output of the operation is
+stored in y.
+
+-------------------------------------------------------------------------------
+
+--11. The Read/Write flag------------------------------------------------------
+
+This CPU exposes a read/write flag to the systems designer. It can be used for
+address decoding, or any other hardware application where determining the state
+of a cycle is required. The flag is HIGH when the CPU is writing to the bus,
+and goes LOW when the CPU is reading from the bus. Below is a list of
+instructions that trigger the R/W flag (by making a write cycle):
+
+--Table 11.1: List of write instructions---------------------------------------
+
+Instruction -- Purpose -- Cycles
+ST -- Stores the value of a register to a memory address -- Dual-Cycle
+
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+
+--12. The testbench------------------------------------------------------------
+
+The testbench provides stimuli for the CPU, when used in a simulation
+environment. When used, it will display a list of key signals, along with the
+time of operation (in ticks). All signals will be dumped to the waves.vcd file,
+which can be opened and inspected by any waveform viewer adhering to the
+VCD standard (fe. GTKwave). 
+
+The clock period used in this testbech is five (5) ticks. This can be easily
+changed, though.
+
+Below is a list of the signals monitored on the testbench output:
+
+--Table 12.1: List of signals monitored by the testbench-----------------------
+
+Signal -- Description
+dut0.clk -- The system clock.
+dut0.reset -- System reset signal.
+dut0.datamem_address -- Current data memory address.
+dut0.usermem_address -- Current user memory address.
+dut0.datamem_data -- Current data being output to the data memory.
+dut0.usermem_data_in -- Current data being output to the user memory. (Input)
+dut0.usermem_data_out -- Current data being output to the user memory. (Out)
+dut0.rw -- Read/Write flag.
+$time -- Simulation time (in ticks).
+
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------

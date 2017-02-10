@@ -1,0 +1,11 @@
+This is a simple 8-bit CPU I designed in order to learn Verilog.
+
+It is licensed under the LGPL license. For more information, read the COPYING
+file.
+
+(One exception is the testbench, which is licensed under the ISC license.)
+
+TODO:
+
+        - Document it (Partially done. See the HACKING file.)
+        - Write an assembler for it
